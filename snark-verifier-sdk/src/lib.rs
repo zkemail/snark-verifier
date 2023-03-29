@@ -33,7 +33,7 @@ pub const BITS: usize = 88;
 /// PCS be either `Kzg<Bn256, Gwc19>` or `Kzg<Bn256, Bdfg21>`
 pub type Plonk<PCS> = verifier::Plonk<PCS, LimbsEncoding<LIMBS, BITS>>;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Snark {
     pub protocol: Protocol<G1Affine>,
     pub instances: Vec<Vec<Fr>>,

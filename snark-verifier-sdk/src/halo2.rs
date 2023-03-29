@@ -191,11 +191,11 @@ where
         MSMAccumulator = DualMSM<'params, Bn256>,
     >,
 {
-    if let Some(path) = &path {
-        if let Ok(snark) = read_snark(path) {
-            return snark;
-        }
-    }
+    // if let Some(path) = &path {
+    //     if let Ok(snark) = read_snark(path) {
+    //         return snark;
+    //     }
+    // }
     let protocol = compile(
         params,
         pk.get_vk(),
@@ -209,14 +209,14 @@ where
         gen_proof::<ConcreteCircuit, P, V>(params, pk, circuit, instances.clone(), rng, None);
 
     let snark = Snark::new(protocol, instances, proof);
-    if let Some(path) = &path {
-        let f = File::create(path).unwrap();
-        #[cfg(feature = "display")]
-        let write_time = start_timer!(|| "Write SNARK");
-        bincode::serialize_into(f, &snark).unwrap();
-        #[cfg(feature = "display")]
-        end_timer!(write_time);
-    }
+    // if let Some(path) = &path {
+    //     let f = File::create(path).unwrap();
+    //     #[cfg(feature = "display")]
+    //     let write_time = start_timer!(|| "Write SNARK");
+    //     bincode::serialize_into(f, &snark).unwrap();
+    //     #[cfg(feature = "display")]
+    //     end_timer!(write_time);
+    // }
     snark
 }
 
@@ -253,10 +253,10 @@ pub fn gen_snark_shplonk<ConcreteCircuit: CircuitExt<Fr>>(
 /// Tries to deserialize a SNARK from the specified `path` using `bincode`.
 ///
 /// WARNING: The user must keep track of whether the SNARK was generated using the GWC or SHPLONK multi-open scheme.
-pub fn read_snark(path: impl AsRef<Path>) -> Result<Snark, bincode::Error> {
-    let f = File::open(path).map_err(Box::<bincode::ErrorKind>::from)?;
-    bincode::deserialize_from(f)
-}
+// pub fn read_snark(path: impl AsRef<Path>) -> Result<Snark, bincode::Error> {
+//     let f = File::open(path).map_err(Box::<bincode::ErrorKind>::from)?;
+//     bincode::deserialize_from(f)
+// }
 
 pub fn gen_dummy_snark<ConcreteCircuit, MOS>(
     params: &ParamsKZG<Bn256>,

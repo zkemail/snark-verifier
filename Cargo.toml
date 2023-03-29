@@ -1,8 +1,5 @@
 [workspace]
-members = [
-    "snark-verifier",
-    "snark-verifier-sdk",
-]
+members = ["snark-verifier", "snark-verifier-sdk"]
 
 [profile.dev]
 opt-level = 3
@@ -24,7 +21,7 @@ codegen-units = 16
 opt-level = 3
 debug = false
 debug-assertions = false
-lto = "fat" 
+lto = "fat"
 # codegen-units = 1
 panic = "abort"
 incremental = false
@@ -33,7 +30,3 @@ incremental = false
 [profile.flamegraph]
 inherits = "release"
 debug = true
-
-# patch until PR https://github.com/privacy-scaling-explorations/halo2/pull/111 is merged
-[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
-halo2_proofs = { git = "https://github.com/axiom-crypto/halo2.git", branch = "feat/serde-raw" }
