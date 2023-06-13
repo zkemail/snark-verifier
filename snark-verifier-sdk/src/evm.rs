@@ -185,7 +185,7 @@ pub fn evm_verify(
     let calldata = encode_calldata(&instances, &proof);
     let success = {
         let mut evm = ExecutorBuilder::default().with_gas_limit(u64::MAX.into());
-        if limit_contract_code_size {
+        if !limit_contract_code_size {
             evm = evm.with_contract_code_size_limit(usize::MAX);
         }
         let mut evm = evm.build();
