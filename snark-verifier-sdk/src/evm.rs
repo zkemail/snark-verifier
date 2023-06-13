@@ -176,10 +176,19 @@ pub fn gen_evm_verifier_shplonk<C: CircuitExt<Fr>>(
     gen_evm_verifier::<C, Kzg<Bn256, Bdfg21>>(params, vk, num_instance, path)
 }
 
-pub fn evm_verify(deployment_code: Vec<u8>, instances: Vec<Vec<Fr>>, proof: Vec<u8>) {
+pub fn evm_verify(
+    deployment_code: Vec<u8>,
+    limit_contract_code_size: bool,
+    instances: Vec<Vec<Fr>>,
+    proof: Vec<u8>,
+) {
     let calldata = encode_calldata(&instances, &proof);
     let success = {
-        let mut evm = ExecutorBuilder::default().with_gas_limit(u64::MAX.into()).build();
+        let mut evm = ExecutorBuilder::default().with_gas_limit(u64::MAX.into());
+        if limit_contract_code_size {
+            evm = evm.with_contract_code_size_limit(usize::MAX);
+        }
+        let mut evm = evm.build();
 
         let caller = Address::from_low_u64_be(0xfe);
         let verifier = evm.deploy(caller, deployment_code.into(), 0.into()).address.unwrap();
