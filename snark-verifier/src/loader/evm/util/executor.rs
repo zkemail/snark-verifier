@@ -3,9 +3,10 @@
 use bytes::Bytes;
 use ethereum_types::{Address, H256, U256, U64};
 use revm::{
-    evm_inner, opcode, spec_opcode_gas, Account, BlockEnv, CallInputs, CallScheme, CreateInputs,
-    CreateScheme, Database, DatabaseCommit, EVMData, Env, ExecutionResult, Gas, GasInspector,
-    InMemoryDB, Inspector, Interpreter, Memory, OpCode, Return, TransactOut, TransactTo, TxEnv,
+    evm_inner, opcode, spec_opcode_gas, Account, BlockEnv, CallInputs, CallScheme, CfgEnv,
+    CreateInputs, CreateScheme, Database, DatabaseCommit, EVMData, Env, ExecutionResult, Gas,
+    GasInspector, InMemoryDB, Inspector, Interpreter, Memory, OpCode, Return, TransactOut,
+    TransactTo, TxEnv,
 };
 use sha3::{Digest, Keccak256};
 use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
@@ -46,13 +47,8 @@ fn get_create2_address_from_hash(
     salt: [u8; 32],
     init_code_hash: impl Into<Bytes>,
 ) -> Address {
-    let bytes = [
-        &[0xff],
-        from.into().as_bytes(),
-        salt.as_slice(),
-        init_code_hash.into().as_ref(),
-    ]
-    .concat();
+    let bytes =
+        [&[0xff], from.into().as_bytes(), salt.as_slice(), init_code_hash.into().as_ref()].concat();
 
     let hash = keccak256(&bytes);
 
@@ -292,29 +288,15 @@ impl Debugger {
 
     fn enter(&mut self, depth: usize, address: Address, kind: CallKind) {
         self.context = address;
-        self.head = self.arena.push_node(DebugNode {
-            depth,
-            address,
-            kind,
-            ..Default::default()
-        });
+        self.head = self.arena.push_node(DebugNode { depth, address, kind, ..Default::default() });
     }
 
     fn exit(&mut self) {
         if let Some(parent_id) = self.arena.arena[self.head].parent {
-            let DebugNode {
-                depth,
-                address,
-                kind,
-                ..
-            } = self.arena.arena[parent_id];
+            let DebugNode { depth, address, kind, .. } = self.arena.arena[parent_id];
             self.context = address;
-            self.head = self.arena.push_node(DebugNode {
-                depth,
-                address,
-                kind,
-                ..Default::default()
-            });
+            self.head =
+                self.arena.push_node(DebugNode { depth, address, kind, ..Default::default() });
         }
     }
 }
@@ -332,11 +314,7 @@ impl<DB: Database> Inspector<DB> for Debugger {
         let opcode_infos = spec_opcode_gas(data.env.cfg.spec_id);
         let opcode_info = &opcode_infos[op as usize];
 
-        let push_size = if opcode_info.is_push() {
-            (op - opcode::PUSH1 + 1) as usize
-        } else {
-            0
-        };
+        let push_size = if opcode_info.is_push() { (op - opcode::PUSH1 + 1) as usize } else { 0 };
         let push_bytes = match push_size {
             0 => None,
             n => {
@@ -402,12 +380,7 @@ impl<DB: Database> Inspector<DB> for Debugger {
             CallKind::Create,
         );
 
-        (
-            Return::Continue,
-            None,
-            Gas::new(call.gas_limit),
-            Bytes::new(),
-        )
+        (Return::Continue, None, Gas::new(call.gas_limit), Bytes::new())
     }
 
     fn create_end(
@@ -628,12 +601,7 @@ impl<DB: Database> Inspector<DB> for InspectorStack {
             }
         );
 
-        (
-            Return::Continue,
-            None,
-            Gas::new(call.gas_limit),
-            Bytes::new(),
-        )
+        (Return::Continue, None, Gas::new(call.gas_limit), Bytes::new())
     }
 
     fn create_end(
@@ -707,6 +675,7 @@ pub struct DeployResult {
 pub struct ExecutorBuilder {
     debugger: bool,
     gas_limit: Option<U256>,
+    contract_code_size_limit: Option<usize>,
 }
 
 impl ExecutorBuilder {
@@ -720,8 +689,17 @@ impl ExecutorBuilder {
         self
     }
 
+    pub fn with_contract_code_size_limit(mut self, contract_code_size_limit: usize) -> Self {
+        self.contract_code_size_limit = Some(contract_code_size_limit);
+        self
+    }
+
     pub fn build(self) -> Executor {
-        Executor::new(self.debugger, self.gas_limit.unwrap_or(U256::MAX))
+        Executor::new(
+            self.debugger,
+            self.gas_limit.unwrap_or(U256::MAX),
+            self.contract_code_size_limit,
+        )
     }
 }
 
@@ -730,15 +708,12 @@ pub struct Executor {
     db: InMemoryDB,
     debugger: bool,
     gas_limit: U256,
+    contract_code_size_limit: Option<usize>,
 }
 
 impl Executor {
-    fn new(debugger: bool, gas_limit: U256) -> Self {
-        Executor {
-            db: InMemoryDB::default(),
-            debugger,
-            gas_limit,
-        }
+    fn new(debugger: bool, gas_limit: U256, contract_code_size_limit: Option<usize>) -> Self {
+        Executor { db: InMemoryDB::default(), debugger, gas_limit, contract_code_size_limit }
     }
 
     pub fn db_mut(&mut self) -> &mut InMemoryDB {
@@ -750,16 +725,8 @@ impl Executor {
         let result = self.call_raw_with_env(env);
         self.commit(&result);
 
-        let RawCallResult {
-            exit_reason,
-            out,
-            gas_used,
-            gas_refunded,
-            logs,
-            debug,
-            env,
-            ..
-        } = result;
+        let RawCallResult { exit_reason, out, gas_used, gas_refunded, logs, debug, env, .. } =
+            result;
 
         let address = match (exit_reason, out) {
             (return_ok!(), TransactOut::Create(_, Some(address))) => Some(address),
@@ -794,13 +761,7 @@ impl Executor {
         let result =
             evm_inner::<_, true>(&mut env, &mut self.db.clone(), &mut inspector).transact();
         let (exec_result, state_changeset) = result;
-        let ExecutionResult {
-            exit_reason,
-            gas_refunded,
-            gas_used,
-            out,
-            ..
-        } = exec_result;
+        let ExecutionResult { exit_reason, gas_refunded, gas_used, out, .. } = exec_result;
 
         let result = match out {
             TransactOut::Call(ref data) => data.to_owned(),
@@ -824,16 +785,13 @@ impl Executor {
 
     fn commit(&mut self, result: &RawCallResult) {
         if let Some(state_changeset) = result.state_changeset.as_ref() {
-            self.db
-                .commit(state_changeset.clone().into_iter().collect());
+            self.db.commit(state_changeset.clone().into_iter().collect());
         }
     }
 
     fn inspector(&self) -> InspectorStack {
-        let mut stack = InspectorStack {
-            logs: Some(LogCollector::default()),
-            ..Default::default()
-        };
+        let mut stack =
+            InspectorStack { logs: Some(LogCollector::default()), ..Default::default() };
         if self.debugger {
             let gas_inspector = Rc::new(RefCell::new(GasInspector::default()));
             stack.gas = Some(gas_inspector.clone());
@@ -849,11 +807,10 @@ impl Executor {
         data: Bytes,
         value: U256,
     ) -> Env {
+        let mut cfg = CfgEnv::default();
+        cfg.limit_contract_code_size = self.contract_code_size_limit;
         Env {
-            block: BlockEnv {
-                gas_limit: self.gas_limit,
-                ..BlockEnv::default()
-            },
+            block: BlockEnv { gas_limit: self.gas_limit, ..BlockEnv::default() },
             tx: TxEnv {
                 caller,
                 transact_to,
@@ -862,7 +819,7 @@ impl Executor {
                 gas_limit: self.gas_limit.as_u64(),
                 ..TxEnv::default()
             },
-            ..Env::default()
+            cfg,
         }
     }
 }
